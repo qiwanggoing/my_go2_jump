@@ -80,12 +80,12 @@ class GO2_JUMP_Cfg_Yu( LeggedRobotCfg ):
         control_type = 'P'
         stiffness = {'joint': 20.}  # [N*m/rad]
         damping = {'joint': 0.5}     # [N*m*s/rad]
-        # action scale: target angle = actionScale * action + defaultAngle
-        action_scale = 0.25
+        # Torque control
+        action_scale = 10.0
         # decimation: Number of control action updates @ sim DT per policy DT
         decimation = 4
     class asset:
-        file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/go2/urdf/go2.urdf'
+        file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/go2/urdf/go2_torque.urdf'
         name = "go2"
         foot_name = "foot"
         penalize_contacts_on = ["thigh", "calf"]
@@ -146,20 +146,20 @@ class GO2_JUMP_Cfg_Yu( LeggedRobotCfg ):
 
     class rewards:
         class scales:
-            termination = -0.0
+            termination = -10.0
             tracking_lin_vel = 2.0
             tracking_ang_vel = 2.0
             lin_vel_z = 0.05
-            ang_vel_xy = 0.2#0.5平地的
-            orientation = 0.6#0.1 1.0
-            torques = -0.0002
+            ang_vel_xy = 0.5#0.5平地的
+            orientation = 1.0#0.1 1.0
+            torques = -0.0005
             dof_vel = -0.
             dof_acc = -5.5e-4
             base_height = 1.0#0.1 
             feet_air_time =  1.0
             collision = -1.
             feet_stumble = -0.0 
-            action_rate = -0.01
+            action_rate = -0.05
             # stand_still = -2.
             default_pos =-0.1####
             default_hip_pos=0.3
@@ -270,7 +270,7 @@ class GO2_JUMP_PPO_Yu(LeggedRobotCfgPPO):
 
         # logging
         save_interval = 100 # check for potential saves every this many iterations
-        experiment_name = 'go2_jump'
+        experiment_name = 'go2_jump_torque'
         run_name = ''
         # load and resume
         resume = False

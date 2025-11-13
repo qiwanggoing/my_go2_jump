@@ -154,7 +154,7 @@ class GO2_JUMP_Robot(BaseTask):
     def check_termination(self):
         """ Check if environments need to be reset
         """
-        self.reset_buf = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1., dim=1)
+        self.reset_buf = torch.any(torch.norm(self.contact_forces[:, self.non_feet_indices, :], dim=-1) > 1., dim=1)
         # print(torch.sum(self.reset_buf))
         self.time_out_buf = self.episode_length_buf > self.max_episode_length # no terminal reward for time-outs
         self.reset_buf |= self.time_out_buf
@@ -476,11 +476,11 @@ class GO2_JUMP_Robot(BaseTask):
 
     def _compute_torques(self, actions):
         """ Compute torques from actions.
-            Actions can be interpreted as position or velocity targets given to a PD controller, or directly as scaled torques.
+            Actions are interpreted as residual torques and added to a base PD controller.
             [NOTE]: torques must have the same dimension as the number of DOFs, even if some DOFs are not actuated.
 
         Args:
-            actions (torch.Tensor): Actions
+            actions (torch.Tensor): Actions (scaled residual torques from policy)
 
         Returns:
             [torch.Tensor]: Torques sent to the simulation
@@ -489,9 +489,16 @@ class GO2_JUMP_Robot(BaseTask):
         p_gains = self.p_gains * self.p_gains_multiplier
         d_gains = self.d_gains * self.d_gains_multiplier
 
-        torques = p_gains * (actions + self.default_dof_pos - self.dof_pos + self.motor_zero_offsets) - d_gains * self.dof_vel
+        # 1. 计算基础PD力矩 (Base PD controller)
+        # 这个力矩总是试图将机器人拉回到 default_dof_pos
+        pd_torques = p_gains * (self.default_dof_pos - self.dof_pos + self.motor_zero_offsets) - d_gains * self.dof_vel
+
+        # 'actions' 已经是被 action_scale (例如 10.0) 缩放过的残差力矩
+        # 2. 叠加残差力矩 (Add residual torques)
+        torques = pd_torques + actions
 
         return torch.clip(torques, -self.torque_limits, self.torque_limits)
+
     def _reset_dofs(self, env_ids):
         """ Resets DOF position and velocities of selected environmments
         Positions are randomly selected within 0.5:1.5 x default positions.
@@ -886,6 +893,17 @@ class GO2_JUMP_Robot(BaseTask):
         for i in range(len(termination_contact_names)):
             self.termination_contact_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], termination_contact_names[i])
 
+        # 创建一个包含所有身体部件索引的列表
+        all_body_indices = torch.arange(self.num_bodies, device=self.device, dtype=torch.long)
+        
+        # 创建一个布尔掩码，标记哪些是足部
+        feet_mask = torch.zeros(self.num_bodies, device=self.device, dtype=torch.bool)
+        feet_mask[self.feet_indices] = True
+        
+        # self.non_feet_indices 现在包含了所有非足部的身体部件索引
+        # (即 base, all thighs, all calves, etc.)
+        self.non_feet_indices = all_body_indices[~feet_mask]
+
     def _get_env_origins(self):
         """ Sets environment origins. On rough terrain the origins are defined by the terrain platforms.
             Otherwise create a grid.
@@ -1052,13 +1070,13 @@ class GO2_JUMP_Robot(BaseTask):
 
     def _reward_base_height(self):
         # Penalize base height away from target
-        base_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
+        base_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)*(torch.norm(self.commands[:, :2], dim=1) < 0.2)
 
-        return torch.exp(-torch.abs(base_height - self.cfg.rewards.base_height_target)*10)*(torch.norm(self.commands[:, :2], dim=1) < 0.2)
+        return torch.exp(-torch.abs(base_height - self.cfg.rewards.base_height_target)*10)
 
     def _reward_torques(self):
-        # Penalize torques
-        return torch.sum(torch.abs(self.torques), dim=1)
+        # Penalize residual torques (policy output)
+        return torch.sum(torch.square(self.actions), dim=1)
 
     def _reward_dof_vel(self):
         # Penalize dof velocities
