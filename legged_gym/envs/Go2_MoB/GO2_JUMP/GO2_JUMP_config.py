@@ -78,10 +78,10 @@ class GO2_JUMP_Cfg_Yu( LeggedRobotCfg ):
     class control( LeggedRobotCfg.control ):
         # PD Drive parameters:
         control_type = 'P'
-        stiffness = {'joint': 20.}  # [N*m/rad]
-        damping = {'joint': 0.5}     # [N*m*s/rad]
+        stiffness = {'joint': 20.}  # [N*m/rad] P gain
+        damping = {'joint': 0.5}     # [N*m*s/rad] D gain
         # Torque control
-        action_scale = 10.0
+        action_scale = 10.0 #23.5 complete torque
         # decimation: Number of control action updates @ sim DT per policy DT
         decimation = 4
     class asset:

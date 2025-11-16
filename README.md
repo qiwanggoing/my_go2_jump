@@ -82,3 +82,6 @@ PD 控制器仍然存在，但其角色变为一个基础稳定器，始终试�
 
 ## 3. 结论
 完成以上修改后，策略网络的输出 `actions` 的物理含义从“目标位置”（弧度）彻底转变为“残差力矩”（牛顿·米）。
+```python
+python legged_gym/scripts/play.py --task=go2_jump
+  ```  
